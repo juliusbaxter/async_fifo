@@ -40,56 +40,60 @@ module fifomem_dp
     input wire                b_winc
     );
 
-generate
-  begin : dpram
+  localparam DEPTH = 1<<ADDRSIZE;
 
-    localparam DEPTH = 1<<ADDRSIZE;
-    reg [DATASIZE-1:0] mem [0:DEPTH-1];
+  // ASIC synthesizable flops
+  // Note this does not model a true dual port memory!
+  // Also note the contents are NOT retained across direction switches
+  // (but the outer addressing logic should ensure that it doesn't matter).
 
-  if (FALLTHROUGH == "TRUE")
-    begin : fallthrough
+  reg [DATASIZE-1:0] mema [0:DEPTH-1];
+  reg [DATASIZE-1:0] memb [0:DEPTH-1];
 
-      always @(posedge a_clk)
-        if (a_winc)
-          mem[a_addr] <= a_wdata;
+  generate
+    if (FALLTHROUGH == "TRUE")
+      begin : fallthrough
 
-      always @*
-        a_rdata  = mem[a_addr];
+        always @(posedge a_clk)
+          if (a_winc)
+            mema[a_addr] <= a_wdata;
 
-      always @(posedge b_clk)
-        if (b_winc)
-          mem[b_addr] <= b_wdata;
+        always @*
+          a_rdata  = memb[a_addr];
 
-      always @*
-        b_rdata  = mem[b_addr];
+        always @(posedge b_clk)
+          if (b_winc)
+            memb[b_addr] <= b_wdata;
 
-    end // block: fallthrough
-  else
-    begin : registered
+        always @*
+          b_rdata  = mema[b_addr];
 
-      wire a_en = a_rinc | a_winc;
+      end // block: fallthrough
+    else
+      begin : registered
 
-      always @(posedge a_clk)
-        if (a_en)
-          begin
-            if (a_winc)
-              mem[a_addr] <= a_wdata;
-            a_rdata <= mem[a_addr];
-          end
+        wire a_en = a_rinc | a_winc;
 
-      wire b_en = b_rinc | b_winc;
+        always @(posedge a_clk)
+          if (a_winc)
+            mema[a_addr] <= a_wdata;
 
-      always @(posedge b_clk)
-        if (b_en)
-          begin
-            if (b_winc)
-              mem[b_addr] <= b_wdata;
-            b_rdata <= mem[b_addr];
-          end
-    end // block: registered
-  end // block: dpram
-endgenerate
+        always @(posedge a_clk)
+          if (a_rinc)
+            a_rdata <= memb[a_addr];
 
+        wire b_en = b_rinc | b_winc;
+
+        always @(posedge b_clk)
+          if (b_winc)
+            memb[b_addr] <= b_wdata;
+
+        always @(posedge b_clk)
+          if (b_rinc)
+            b_rdata <= mema[b_addr];
+
+      end // block: registered
+  endgenerate
 
 endmodule
 
